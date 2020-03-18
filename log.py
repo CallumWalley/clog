@@ -1,75 +1,51 @@
-import os, slack, json, logging
+import logging, slack
+from os import getenv
+from json import load
 
-# Settings relative to MODULE no calling script
+class SlackHandler(logging.StreamHandler):
+    def __init__(self, channel, client):
+        logging.StreamHandler.__init__(self)
+        self.client = client
+        self.channel = channel
+        
+        response=self.client.chat_postMessage(
+            text=":satellite_antenna: Starting up new logger...",
+            channel=(self.channel)
+        )
+        assert response["ok"]
+
+    def emit(self, record):
+        msg = self.format(record).replace("WARNING -", ":warning:").replace("ERROR -", ":x:")
+        response=self.client.chat_postMessage(
+            text=msg,
+            channel=(self.channel)
+        )
+        assert response["ok"]
+
+def new_handler(handler_type, level, format="*%(filename)s :* %(levelname)s - %(message)s"):
+    handler_type.setLevel(level)
+    handler_type.setFormatter(logging.Formatter(format))
+    logbject.addHandler(handler_type)
+    print(handler_type)
+
+# Load config
 with open("/".join(__file__.split('/')[:-1]) + '/config.json') as f:
-    config = json.load(f)
+    config = load(f)
 
-def init_logger(path):
-    # Custom slack handler.
-    class SlackHandler(logging.StreamHandler):
-        def __init__(self, channel, client):
-            logging.StreamHandler.__init__(self)
-            self.client = client
-            self.channel = channel
-            
-            response=self.client.chat_postMessage(
-                text=":satellite_antenna: Starting up logger...",
-                channel=(self.channel)
-            )
-            assert response["ok"]
+# Start slack webclient.
+client = slack.WebClient(token=config["api_token"])
 
-        def emit(self, record):
-            msg = self.format(record).replace("WARNING -", ":warning:").replace("ERROR -", ":x:")
-            response=self.client.chat_postMessage(
-                text=msg,
-                channel=(self.channel)
-            )
-            assert response["ok"]
-        # response = client.chat_postMessage(
+# Init log object
+logbject = logging.getLogger(__name__)
+logbject.setLevel(logging.DEBUG)
+# console_handler sends to stdout
+new_handler(logging.StreamHandler(), getenv("LOGLEVEL", "INFO"), format="%(levelname)s - %(message)s")
 
-        #     text="Hello world!")
-        # assert response["ok"]
-        # assert response["message"]["text"] == "Hello world!"
+# file_handler appends to designated file
+new_handler(logging.FileHandler(config["path"]), "WARNING")
 
-    # ===== Init Stuff Stuff =====#
-    log_path = path
-    log = logging.getLogger(__name__)
-    log.setLevel(logging.DEBUG)
+# slack_handler sends to slack channel.
+new_handler(SlackHandler(config["channel"], client), "WARNING")
 
 
 
-    # Log Info to console USE ENV VARIABLE LOGLEVEL TO OVERRIDE
-    console_logs = logging.StreamHandler()
-    console_logs.setFormatter(logging.Formatter("%(levelname)s - %(message)s"))
-    try:
-        console_logs.setLevel(os.environ.get("LOGLEVEL", "INFO"))
-    except Exception as thing:
-        console_logs.setLevel("INFO")
-    
-    log.addHandler(console_logs)
-
-    # Log warnings and above to text file.
-    file_logs = logging.FileHandler(log_path)
-    file_logs.setLevel("WARNING")
-    file_logs.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-
-    log.addHandler(file_logs)
-
-    # Log warnings and above to slack channel.
-    # Start slack webclient.
-
-    client = slack.WebClient(token=config["api_token"])
-           
-    # Target channel
-    #channel='#random'
-    channel=config["channel"]
-
-    slack_logs = SlackHandler(channel, client)
-    slack_logs.setLevel("WARNING")
-    slack_logs.setFormatter(logging.Formatter("*%(filename)s :* %(levelname)s - %(message)s"))
-
-    log.addHandler(slack_logs)
-
-    return log
-
-log=init_logger("warn.logs")
