@@ -26,7 +26,6 @@ def new_handler(handler_type, level, format="*%(filename)s :* %(levelname)s - %(
     handler_type.setLevel(level)
     handler_type.setFormatter(logging.Formatter(format))
     logbject.addHandler(handler_type)
-    print(handler_type)
 
 # Load config
 with open("/".join(__file__.split('/')[:-1]) + '/config.json') as f:
